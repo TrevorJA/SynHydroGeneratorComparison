@@ -1,0 +1,79 @@
+INFO: Validated data: 417 timesteps, 4 sites, period 1980-01-01 00:00:00 to 2014-09-01 00:00:00
+INFO: Preprocessing complete: 4 sites, 35 years
+INFO: Fitting complete: 34 years, 4 sites
+INFO: Generated 20 realizations of 50 years each
+INFO: Validated data: 417 timesteps, 4 sites, period 1980-01-01 00:00:00 to 2014-09-01 00:00:00
+INFO: Preprocessing complete: 4 sites, 417 timesteps, n_neighbors=21, frequency=MS
+INFO: Fitting complete: 12 month-conditioned KNN models, K=21
+INFO: Generated 20 realizations of 600 timesteps each
+INFO: Validated data: 12410 timesteps, 1 sites, period 1980-01-01 00:00:00 to 2013-12-31 00:00:00
+INFO: Preprocessing complete: 12410 days (34 years)
+INFO: Fitting complete: 12410 observations, marginal=kappa
+INFO: Generating 20 realizations of 18250 days (2 chunks of 12410 each)
+INFO: Generated 20 realizations
+INFO: Validated data: 417 timesteps, 1 sites, period 1980-01-01 00:00:00 to 2014-09-01 00:00:00
+INFO: Preprocessing complete: 417 months
+INFO: Fitting complete: 417 months
+INFO: Generated 20 realizations of 50 years each
+INFO: Validated data: 417 timesteps, 4 sites, period 1980-01-01 00:00:00 to 2014-09-01 00:00:00
+INFO: Preprocessing complete: 417 months, 4 sites
+INFO: Fitting complete: 12 A/B matrices for 4 sites
+INFO: Generated 20 realizations of 50 years × 4 sites
+INFO: Validated data: 35 timesteps, 4 sites, period 1980-01-01 00:00:00 to 2014-01-01 00:00:00
+INFO: Preprocessing complete: 35 observations, 4 sites, offset=1.0
+INFO: Fitting complete: 2 states, transition matrix:
+[[7.10671713e-01 2.89328287e-01]
+ [1.00000000e+00 1.77990334e-16]]
+INFO: Generated 20 realizations
+INFO: Validated data: 35 timesteps, 1 sites, period 1980-01-01 00:00:00 to 2014-01-01 00:00:00
+WARNING: Unknown frequency None. Assuming annual data.
+INFO: Preprocessing complete: 35 annual values
+INFO: Step 1/4: Computing continuous wavelet transform
+INFO: Step 2/4: Computing Scale Averaged Wavelet Power (SAWP)
+INFO: Step 3/4: Normalizing coefficients by SAWP
+INFO: Step 4/4: Fitting AR models to each scale
+INFO: Fitting complete: 16 scales, AR(1) models fitted
+INFO: Generated 20 realizations of 50 years each
+INFO: Validated data: 417 timesteps, 1 sites, period 1980-01-01 00:00:00 to 2014-09-01 00:00:00
+INFO: Preprocessing complete: 417 timesteps, frequency=monthly
+INFO: Estimating d using whittle method...
+INFO: Estimated d = 0.3308, Hurst exponent H = 0.8308
+INFO: BIC selected ARMA(2,0) for short-memory component
+INFO: Fitted AR(2) coefficients: [ 0.03621001 -0.17389376]
+INFO: Fitting complete: sigma_eps^2 = 0.8487
+INFO: Generated 20 realizations of 600 timesteps each
+INFO: Validated data: 417 timesteps, 4 sites, period 1980-01-01 00:00:00 to 2014-09-01 00:00:00
+INFO: Preprocessing complete: 417 months, 4 sites
+INFO: Fit complete: copula=gaussian, marginals=parametric, 4 sites
+INFO: Generated 20 realizations of 600 months x 4 sites
+INFO: Validated data: 417 timesteps, 4 sites, period 1980-01-01 00:00:00 to 2014-09-01 00:00:00
+INFO: Preprocessing complete: 417 months, 4 sites
+INFO: Estimated t-copula df = 50.0
+INFO: Fit complete: copula=t, marginals=parametric, 4 sites
+INFO: Generated 20 realizations of 600 months x 4 sites
+INFO: Validated data: 417 timesteps, 4 sites, period 1980-01-01 00:00:00 to 2014-09-01 00:00:00
+INFO: Preprocessing complete: 417 months, 4 sites
+INFO: Month 1: fitted rvine vine with 7 parameters on 33 obs x 4 sites
+INFO: Month 2: fitted rvine vine with 6 parameters on 35 obs x 4 sites
+INFO: Month 3: fitted rvine vine with 5 parameters on 35 obs x 4 sites
+INFO: Month 4: fitted rvine vine with 4 parameters on 35 obs x 4 sites
+INFO: Month 5: fitted rvine vine with 5 parameters on 35 obs x 4 sites
+INFO: Month 6: fitted rvine vine with 6 parameters on 35 obs x 4 sites
+INFO: Month 7: fitted rvine vine with 5 parameters on 35 obs x 4 sites
+INFO: Month 8: fitted rvine vine with 4 parameters on 35 obs x 4 sites
+INFO: Month 9: fitted rvine vine with 5 parameters on 35 obs x 4 sites
+INFO: Month 10: fitted rvine vine with 7 parameters on 34 obs x 4 sites
+INFO: Month 11: fitted rvine vine with 3 parameters on 34 obs x 4 sites
+INFO: Month 12: fitted rvine vine with 6 parameters on 34 obs x 4 sites
+INFO: Fit complete: vine=rvine, marginals=parametric, 4 sites
+INFO: Generated 20 realizations of 600 months x 4 sites
+INFO: Validated data: 35 timesteps, 4 sites, period 1980-01-01 00:00:00 to 2014-01-01 00:00:00
+INFO: Preprocessing complete: 35 years, 4 sites, delta=1.00
+INFO: Fitting complete: 2 states, best log-likelihood=88.7942, transition matrix:
+[[0.83367459 0.16632541]
+ [0.22859468 0.77140532]]
+INFO: Generated 20 realizations.
+INFO: Validated data: 12410 timesteps, 4 sites, period 1980-01-01 00:00:00 to 2013-12-31 00:00:00
+INFO: Preprocessing complete: 12410 days (34 years), 4 sites
+INFO: Fitting complete: 4 sites, 12410 days, wavelet=cmor1.5-1.0
+INFO: Generating 20 realizations of 18250 days (2 chunks of 12410 each)
