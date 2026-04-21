@@ -1,29 +1,19 @@
-"""
-Split-sample validation: fit on first half, validate on second half (and
-vice versa) for all (region, model) pairs.
+"""Split-sample validation logic: shared library functions.
 
-Tests whether generator performance degrades out-of-sample, which helps
-identify overfitting in high-parameter models.
-
-Usage:
-  python 06_split_sample.py                              # all regions/models
-  python 06_split_sample.py --region new_england          # single region
-  python 06_split_sample.py --region new_england --model kirsch  # single pair
-
-Output:
-  outputs/split_sample/split_sample_results.csv
+The HPC array entry point (pipeline/split_sample_single.py) and the
+interactive batch script (scripts/split_sample.py) both import from here.
+Keeping the core logic here removes the importlib hack previously needed
+because the source file had a numeric prefix (06_split_sample.py).
 """
 
-import argparse
 import logging
 import traceback
-from pathlib import Path
 
 import numpy as np
 import pandas as pd
 from synhydro import validate_ensemble
 
-from config import DATA_DIR, OUTPUT_DIR, N_REALIZATIONS, N_YEARS, SEED, MODELS
+from config import DATA_DIR, N_REALIZATIONS, N_YEARS, SEED, MODELS
 from basins import CAMELS_REGIONS
 from methods.data import (
     load_region_data,
@@ -32,10 +22,6 @@ from methods.data import (
 )
 from methods.io import GENERATOR_CLASSES
 
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s %(levelname)s: %(message)s",
-)
 logger = logging.getLogger(__name__)
 
 # Water-year split point: WY 1981-1997 / WY 1998-2014
@@ -171,64 +157,3 @@ def run_split_sample_for_pair(
             )
 
     return rows
-
-
-def main():
-    parser = argparse.ArgumentParser(description="Split-sample validation")
-    parser.add_argument("--region", type=str, default=None)
-    parser.add_argument("--model", type=str, default=None)
-    parser.add_argument(
-        "--n-realizations",
-        type=int,
-        default=N_REALIZATIONS,
-        help=f"Realizations per split (default: {N_REALIZATIONS})",
-    )
-    args = parser.parse_args()
-
-    regions = (
-        {args.region: CAMELS_REGIONS[args.region]}
-        if args.region
-        else dict(CAMELS_REGIONS)
-    )
-    enabled = sorted(k for k, v in MODELS.items() if v.get("enabled", True))
-    if args.model:
-        enabled = [args.model]
-
-    out_dir = OUTPUT_DIR / "split_sample"
-    out_dir.mkdir(parents=True, exist_ok=True)
-
-    all_rows = []
-    for region_id in sorted(regions.keys()):
-        for model_key in enabled:
-            logger.info("Split-sample: %s / %s", region_id, model_key)
-            rows = run_split_sample_for_pair(
-                region_id,
-                model_key,
-                n_realizations=args.n_realizations,
-            )
-            all_rows.extend(rows)
-
-    if all_rows:
-        df = pd.DataFrame(all_rows)
-        out_path = out_dir / "split_sample_results.csv"
-        df.to_csv(out_path, index=False)
-        logger.info("Saved %s (%d rows)", out_path, len(df))
-
-        # Summary: average in-sample vs out-of-sample MARE per model
-        summary = (
-            df.groupby(["model", "validation"])["mare"].mean().unstack("validation")
-        )
-        if "in_sample" in summary.columns and "out_of_sample" in summary.columns:
-            summary["degradation"] = summary["out_of_sample"] - summary["in_sample"]
-            summary = summary.sort_values("degradation", ascending=False)
-            print("\n" + "=" * 60)
-            print("Split-Sample Summary (averaged across regions and splits)")
-            print("=" * 60)
-            print(summary.to_string(float_format="%.4f"))
-            print()
-    else:
-        logger.warning("No results produced.")
-
-
-if __name__ == "__main__":
-    main()

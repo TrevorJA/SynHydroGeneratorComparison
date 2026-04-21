@@ -1,7 +1,22 @@
 """Task mapping functions for all three pipeline stages."""
 
+import zlib
+
 from basins import CAMELS_REGIONS
 from config import MODELS
+
+
+def derive_task_seed(base_seed: int, region_id: str, model_key: str) -> int:
+    """Deterministic, task-unique seed for (region, model) pair.
+
+    Global `np.random.seed(SEED)` across 78 array tasks leaves every
+    (region, model) starting from an identical RNG state. Mixing the
+    (region, model) key into the seed via crc32 gives each task its
+    own stream while staying reproducible across re-runs (crc32 is
+    stable, unlike Python's salted hash()). Range-clipped to uint32.
+    """
+    key = f"{region_id}|{model_key}".encode()
+    return (base_seed + zlib.crc32(key)) % (2**32)
 
 
 def get_generation_tasks() -> list:

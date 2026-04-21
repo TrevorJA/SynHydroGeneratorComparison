@@ -9,9 +9,20 @@
 # not to produce meaningful scientific results. Override with the
 # env vars N_REAL, N_YEARS, REGION, SEED if needed.
 #
+# SKIP_MODELS: comma-separated list of model keys to exclude from
+# generation, analysis, and convergence. Use this to skip slow models
+# (e.g. multisite_phase_randomization) for quick iteration.
+#
 # Usage:
-#   ./smoke_test.sh                    # new_england
+#   ./smoke_test.sh                                      # full run
 #   REGION=central_plains ./smoke_test.sh
+#   SKIP_MODELS=multisite_phase_randomization ./smoke_test.sh
+#
+# Submit to SLURM (do not run on login node):
+#   sbatch --job-name=smoke_test --time=02:00:00 --mem=16G \
+#     --output=logs/smoke_test_%j.out \
+#     --wrap="export LD_LIBRARY_PATH=/opt/ohpc/pub/utils/python/3.11.5/lib:\$LD_LIBRARY_PATH && \
+#             PYTHON_CMD=venv/bin/python3.11 bash smoke_test.sh"
 #
 # Exit status:
 #   0 -- all stages passed
@@ -30,6 +41,11 @@ N_REAL="${N_REAL:-10}"
 N_YEARS="${N_YEARS:-10}"
 SEED="${SEED:-42}"
 PYTHON_CMD="${PYTHON_CMD:-python}"
+SKIP_MODELS="${SKIP_MODELS:-}"
+
+should_skip_model() {
+    [[ ",${SKIP_MODELS}," == *",$1,"* ]]
+}
 
 echo "============================================"
 echo "SynHydro model_comparison smoke test"
@@ -37,6 +53,9 @@ echo "  Region:          ${REGION}"
 echo "  N_REALIZATIONS:  ${N_REAL}"
 echo "  N_YEARS:         ${N_YEARS}"
 echo "  Seed:            ${SEED}"
+if [ -n "${SKIP_MODELS}" ]; then
+echo "  Skip models:     ${SKIP_MODELS}"
+fi
 echo "============================================"
 
 # ============================================================================
@@ -46,7 +65,7 @@ echo "============================================"
 if [ ! -d "data/${REGION}" ]; then
     echo ""
     echo "ERROR: data/${REGION} missing. Run:"
-    echo "  ${PYTHON_CMD} 00_retrieve_data.py"
+    echo "  ${PYTHON_CMD} scripts/00_retrieve_data.py"
     exit 1
 fi
 echo ""
@@ -58,18 +77,19 @@ echo "[0/6] Data cache present: data/${REGION}"
 
 echo ""
 echo "[1/6] Generation (serial, 13 models)"
-${PYTHON_CMD} 01_generate_ensembles.py \
+GEN_SKIP_ARGS=""
+if [ -n "${SKIP_MODELS}" ]; then
+    GEN_SKIP_ARGS="--skip-models ${SKIP_MODELS}"
+fi
+${PYTHON_CMD} scripts/01_generate_ensembles.py \
     --region "${REGION}" \
     --n-realizations "${N_REAL}" \
     --n-years "${N_YEARS}" \
-    --seed "${SEED}"
+    --seed "${SEED}" \
+    ${GEN_SKIP_ARGS}
 
 # ============================================================================
 # Step 2 -- analysis (serial loop over models via analyze_single.py)
-#
-# Uses the same per-(region, model) entry point as the HPC array so
-# the output layout matches exactly (metrics_*.csv per model, required
-# by assemble_results and by the analyze-stage gate below).
 # ============================================================================
 
 echo ""
@@ -83,8 +103,12 @@ print(' '.join(models))
 ")
 echo "  Models: ${ANA_MODELS}"
 for model in ${ANA_MODELS}; do
+    if should_skip_model "${model}"; then
+        echo "  -- ${model} [SKIPPED via SKIP_MODELS]"
+        continue
+    fi
     echo "  -- ${model}"
-    ${PYTHON_CMD} analyze_single.py --region "${REGION}" --model "${model}"
+    ${PYTHON_CMD} pipeline/analyze_single.py --region "${REGION}" --model "${model}"
 done
 
 # ============================================================================
@@ -93,7 +117,7 @@ done
 
 echo ""
 echo "[3/6] Assembly"
-${PYTHON_CMD} assemble_results.py --region "${REGION}"
+${PYTHON_CMD} scripts/assemble_results.py --region "${REGION}" --skip-check
 
 # ============================================================================
 # Step 4 -- split-sample (serial, single region)
@@ -101,15 +125,12 @@ ${PYTHON_CMD} assemble_results.py --region "${REGION}"
 
 echo ""
 echo "[4/6] Split-sample (serial, single region)"
-${PYTHON_CMD} 06_split_sample.py \
+${PYTHON_CMD} scripts/split_sample.py \
     --region "${REGION}" \
     --n-realizations "${N_REAL}"
 
 # ============================================================================
 # Step 5 -- convergence (serial loop over non-annual models for this region)
-#
-# Smoke test caps the sweep at N_REAL so we never sample more realizations
-# than were generated. Uses convergence_single.py to match the HPC flow.
 # ============================================================================
 
 echo ""
@@ -123,8 +144,12 @@ print(' '.join(models))
 ")
 echo "  Models: ${CONV_MODELS}"
 for model in ${CONV_MODELS}; do
+    if should_skip_model "${model}"; then
+        echo "  -- ${model} [SKIPPED via SKIP_MODELS]"
+        continue
+    fi
     echo "  -- ${model}"
-    ${PYTHON_CMD} convergence_single.py \
+    ${PYTHON_CMD} pipeline/convergence_single.py \
         --region "${REGION}" \
         --model "${model}" \
         --n-years "${N_YEARS}" \
@@ -138,15 +163,15 @@ done
 
 echo ""
 echo "[6a] SI figures (per-region + cross-region)"
-${PYTHON_CMD} 04b_si_figures.py --region "${REGION}"
+${PYTHON_CMD} scripts/figures/04b_si_figures.py --region "${REGION}"
 
 echo ""
 echo "[6b] SI convergence figures (per-region + cross-region overlay)"
-${PYTHON_CMD} 04c_si_convergence_figures.py --region "${REGION}"
+${PYTHON_CMD} scripts/figures/04c_si_convergence_figures.py --region "${REGION}"
 
 echo ""
 echo "[6c] Main manuscript figures (registry + placeholders)"
-${PYTHON_CMD} 04a_main_figures.py
+${PYTHON_CMD} scripts/figures/04a_main_figures.py
 
 # ============================================================================
 # Summary
@@ -157,11 +182,11 @@ echo "============================================"
 echo "Smoke test complete."
 echo ""
 echo "Artifact summary:"
-echo "  Ensembles:   outputs/${REGION}/ensemble_*.h5"
-echo "  Metrics:     outputs/${REGION}/metrics_*.csv"
+echo "  Ensembles:   outputs/generation/${REGION}/ensemble_*.h5"
+echo "  Metrics:     outputs/analysis/${REGION}/metrics_*.csv"
 echo "  Assembly:    outputs/cross_region/*.csv"
 echo "  Split:       outputs/split_sample/${REGION}__*.csv"
-echo "  Convergence: outputs/${REGION}/convergence_*.csv"
+echo "  Convergence: outputs/convergence/${REGION}/convergence_*.csv"
 echo "  Concordance: outputs/cross_region/tier_concordance.csv"
 echo "  SI figs:     figures/si/${REGION}/*.png, figures/si/cross_region/*.png"
 echo "  Main figs:   figures/main/fig*.png"

@@ -1,28 +1,30 @@
 """
-HPC entry point: convergence sweep for a single (region, model) pair.
+HPC entry point: split-sample validation for a single (region, model) pair.
 
-Designed for SLURM array jobs. Fits one generator, then sweeps
-N_REALIZATIONS_SWEEP ensemble sizes and runs validate_ensemble at each
-level, saving summary and detail CSVs. Skips if output already exists
-unless --force is given.
+Designed for SLURM array jobs. Runs the full 4-scenario split-sample
+protocol (first_half train x {in, out}-of-sample, second_half train
+x {in, out}-of-sample) for one (region, model) pair and saves the
+result as a per-task CSV under outputs/split_sample/.
 
-Only non-annual models are included (annual models have no monthly
-validate_ensemble target).
+Skips if the output CSV already exists unless --force is given.
 
 Usage:
-  python convergence_single.py --task-id 0
-  python convergence_single.py --region new_england --model kirsch
-  python convergence_single.py --list-tasks
-  python convergence_single.py --region new_england --model kirsch --force
+  python pipeline/split_sample_single.py --task-id 0
+  python pipeline/split_sample_single.py --region new_england --model kirsch
+  python pipeline/split_sample_single.py --list-tasks
+  python pipeline/split_sample_single.py --region new_england --model kirsch --force
 
-From SLURM (see run_convergence.sh):
-  python convergence_single.py --task-id $SLURM_ARRAY_TASK_ID
+From SLURM (see pipeline/slurm/run_split_sample.sh):
+  python pipeline/split_sample_single.py --task-id $SLURM_ARRAY_TASK_ID
 """
 
 import argparse
 import logging
-import os
 import sys
+from pathlib import Path
+
+# Make project root importable regardless of working directory.
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 # pyvinecopulib must be imported before pandas/pyarrow on Windows
 try:
@@ -30,18 +32,20 @@ try:
 except ImportError:
     pass
 
-import numpy as np
+import pandas as pd
 
-from config import N_YEARS, SEED
-from methods.io import convergence_exists
-from methods.metrics import run_convergence_for_region_model
-from methods.tasks import get_convergence_tasks
+from config import SPLIT_SAMPLE_DIR, N_REALIZATIONS, N_YEARS, SEED, LOG_DIR
+from methods.io import split_sample_exists, split_sample_output_path
+from methods.split_sample import run_split_sample_for_pair
+from methods.tasks import derive_task_seed, get_split_sample_tasks
 
 logger = logging.getLogger(__name__)
 
 
 def main():
-    parser = argparse.ArgumentParser(description="HPC single-task convergence sweep")
+    parser = argparse.ArgumentParser(
+        description="HPC single-task split-sample validation"
+    )
     parser.add_argument(
         "--task-id",
         type=int,
@@ -61,6 +65,12 @@ def main():
         help="Model key (use with --region for direct invocation)",
     )
     parser.add_argument(
+        "--n-realizations",
+        type=int,
+        default=N_REALIZATIONS,
+        help=f"Realizations per fit/validate scenario (default: {N_REALIZATIONS})",
+    )
+    parser.add_argument(
         "--n-years",
         type=int,
         default=N_YEARS,
@@ -75,17 +85,7 @@ def main():
     parser.add_argument(
         "--force",
         action="store_true",
-        help="Recompute even if output CSVs already exist",
-    )
-    parser.add_argument(
-        "--n-max",
-        type=int,
-        default=None,
-        help=(
-            "Cap the convergence sweep at this realization count. "
-            "Defaults to the module-level N_MAX (500). For smoke tests "
-            "pass the same value as --n-realizations used for generation."
-        ),
+        help="Recompute even if output CSV already exists",
     )
     parser.add_argument(
         "--list-tasks",
@@ -94,7 +94,7 @@ def main():
     )
     args = parser.parse_args()
 
-    tasks = get_convergence_tasks()
+    tasks = get_split_sample_tasks()
 
     if args.list_tasks:
         print(f"Total tasks: {len(tasks)}")
@@ -121,8 +121,8 @@ def main():
         )
         sys.exit(1)
 
-    os.makedirs("logs", exist_ok=True)
-    log_file = os.path.join("logs", f"{region_id}_{model_key}_convergence.log")
+    LOG_DIR.mkdir(parents=True, exist_ok=True)
+    log_file = LOG_DIR / f"{region_id}_{model_key}_split_sample.log"
     logging.basicConfig(
         level=logging.INFO,
         format="%(asctime)s %(levelname)s: %(message)s",
@@ -132,23 +132,36 @@ def main():
         ],
     )
 
+    out_path = split_sample_output_path(SPLIT_SAMPLE_DIR, region_id, model_key)
+    if split_sample_exists(SPLIT_SAMPLE_DIR, region_id, model_key) and not args.force:
+        logger.info("SKIP: %s already exists (use --force to overwrite)", out_path)
+        return
+
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+
+    task_seed = derive_task_seed(args.seed, region_id, model_key)
+
     logger.info(
-        "convergence_single: region=%s, model=%s, force=%s",
+        "split_sample_single: region=%s, model=%s, n_real=%d, force=%s, base_seed=%d, task_seed=%d",
         region_id,
         model_key,
+        args.n_realizations,
         args.force,
+        args.seed,
+        task_seed,
     )
 
-    np.random.seed(args.seed)
-
-    run_convergence_for_region_model(
+    rows = run_split_sample_for_pair(
         region_id,
         model_key,
+        n_realizations=args.n_realizations,
         n_years=args.n_years,
-        seed=args.seed,
-        force=args.force,
-        n_max=args.n_max,
+        seed=task_seed,
     )
+
+    df = pd.DataFrame(rows)
+    df.to_csv(out_path, index=False)
+    logger.info("Saved %s (%d rows)", out_path, len(df))
 
 
 if __name__ == "__main__":

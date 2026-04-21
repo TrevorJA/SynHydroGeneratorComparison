@@ -11,3 +11,5 @@ logs/
 # Python caches
 __pycache__/
 notes/
+venv/
+cache/

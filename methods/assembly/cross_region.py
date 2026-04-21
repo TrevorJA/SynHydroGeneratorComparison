@@ -5,7 +5,7 @@ import logging
 import numpy as np
 import pandas as pd
 
-from config import OUTPUT_DIR, MODELS
+from config import ANALYSIS_DIR, CROSS_REGION_DIR, MODELS
 from basins import CAMELS_REGIONS
 from methods.metrics import load_metrics
 from .tier_concordance import assemble_tier_concordance
@@ -28,7 +28,7 @@ def assemble(region_filter=None) -> None:
 
     enabled_models = sorted(k for k, v in MODELS.items() if v.get("enabled", True))
 
-    cross_dir = OUTPUT_DIR / "cross_region"
+    cross_dir = CROSS_REGION_DIR
     cross_dir.mkdir(parents=True, exist_ok=True)
 
     mare_rows = []
@@ -37,7 +37,7 @@ def assemble(region_filter=None) -> None:
     missing_pairs = []
 
     for region_id in sorted(regions.keys()):
-        region_output = OUTPUT_DIR / region_id
+        region_output = ANALYSIS_DIR / region_id
         for model_key in enabled_models:
             metrics_dict = load_metrics(region_output, model_key)
             if metrics_dict is None:
@@ -152,7 +152,7 @@ def assemble(region_filter=None) -> None:
     # Tier 1 vs Tier 2 concordance artifact (see
     # notes/decisions_log.md 2026-04-17 tier-concordance-check-added)
     if mare_rows:
-        assemble_tier_concordance(OUTPUT_DIR)
+        assemble_tier_concordance(CROSS_REGION_DIR)
 
     # Report missing pairs
     if missing_pairs:

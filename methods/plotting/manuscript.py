@@ -244,7 +244,7 @@ MANUSCRIPT_FIGURES: dict[str, dict] = {
     "fig09_convergence": {
         "title": "Convergence analysis",
         "producer": _produce_fig09,
-        "inputs": ["outputs/new_england/convergence_kirsch.csv"],
+        "inputs": ["outputs/convergence/new_england/convergence_kirsch.csv"],
         "status": "code-ready",
     },
     "fig10_practitioner_guide": {

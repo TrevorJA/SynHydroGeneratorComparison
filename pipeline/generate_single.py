@@ -6,13 +6,11 @@ model combination, then runs generation for that pair only.
 
 Usage:
   # Direct invocation
-  python generate_single.py --task-id 0 --n-realizations 1000
+  python pipeline/generate_single.py --task-id 0
+  python pipeline/generate_single.py --list-tasks
 
-  # From SLURM (see run_hpc_array.sh)
-  python generate_single.py --task-id $SLURM_ARRAY_TASK_ID
-
-  # List all task mappings
-  python generate_single.py --list-tasks
+  # From SLURM (see pipeline/slurm/run_generate.sh)
+  python pipeline/generate_single.py --task-id $SLURM_ARRAY_TASK_ID
 """
 
 import argparse
@@ -21,6 +19,10 @@ import os
 import pickle
 import sys
 import time
+from pathlib import Path
+
+# Make project root importable regardless of working directory.
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 # pyvinecopulib must be imported before pandas/pyarrow on Windows
 try:
@@ -32,7 +34,7 @@ import numpy as np
 
 from config import (
     DATA_DIR,
-    OUTPUT_DIR,
+    GENERATION_DIR,
     N_REALIZATIONS,
     N_YEARS,
     SEED,
@@ -40,11 +42,12 @@ from config import (
     SINGLE_SITE_INDEX,
     MODELS,
     DIAGNOSTICS,
+    LOG_DIR,
 )
 from basins import CAMELS_REGIONS
 from methods.data import load_region_data, select_input_data, get_reference_site_index
 from methods.io import GENERATOR_CLASSES, save_historical_csvs
-from methods.tasks import get_generation_tasks
+from methods.tasks import derive_task_seed, get_generation_tasks
 
 logger = logging.getLogger(__name__)
 
@@ -59,7 +62,7 @@ def generate_for_region_model(
         region_id, DATA_DIR, region_cfg["stations"]
     )
 
-    region_output = OUTPUT_DIR / region_id
+    region_output = GENERATION_DIR / region_id
     region_output.mkdir(parents=True, exist_ok=True)
 
     if DIAGNOSTICS.get("save_historical", True):
@@ -138,6 +141,22 @@ def generate_for_region_model(
         with open(out_path, "wb") as f:
             pickle.dump(ensemble, f)
 
+    # Post-save verification. Guards against partial writes / corrupted
+    # HDF5 that would otherwise pass a bare `.exists()` gate. On failure
+    # raise so the SLURM task exits nonzero.
+    if output_format == "hdf5":
+        import h5py
+        try:
+            with h5py.File(out_path, "r") as f:
+                _ = list(f.keys())
+        except Exception as exc:
+            raise RuntimeError(
+                f"Ensemble HDF5 at {out_path} failed post-save verification: {exc}"
+            ) from exc
+    else:
+        if out_path.stat().st_size == 0:
+            raise RuntimeError(f"Ensemble pickle at {out_path} is zero bytes")
+
     logger.info("Saved: %s", out_path)
 
 
@@ -204,8 +223,8 @@ def main():
     region_id, model_key = tasks[args.task_id]
 
     # Configure logging to file
-    os.makedirs("logs", exist_ok=True)
-    log_file = os.path.join("logs", f"{region_id}_{model_key}.log")
+    LOG_DIR.mkdir(parents=True, exist_ok=True)
+    log_file = LOG_DIR / f"{region_id}_{model_key}.log"
     logging.basicConfig(
         level=logging.INFO,
         format="%(asctime)s %(levelname)s: %(message)s",
@@ -215,24 +234,27 @@ def main():
         ],
     )
 
+    task_seed = derive_task_seed(args.seed, region_id, model_key)
+
     logger.info(
-        "Task %d: region=%s, model=%s, n_real=%d, n_years=%d, seed=%d",
+        "Task %d: region=%s, model=%s, n_real=%d, n_years=%d, base_seed=%d, task_seed=%d",
         args.task_id,
         region_id,
         model_key,
         args.n_realizations,
         args.n_years,
         args.seed,
+        task_seed,
     )
 
-    np.random.seed(args.seed)
+    np.random.seed(task_seed)
 
     generate_for_region_model(
         region_id,
         model_key,
         args.n_realizations,
         args.n_years,
-        args.seed,
+        task_seed,
         args.format,
     )
 

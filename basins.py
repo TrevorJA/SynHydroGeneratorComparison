@@ -57,17 +57,19 @@ CAMELS_REGIONS = {
         "aridity_range": [0.55, 0.75],
         "snow_frac_range": [0.25, 0.40],
         "stations": [
-            "01013500",  # Fish River near Fort Kent, ME (area ~1450 km2)
-            "01031500",  # Piscataquis River near Dover-Foxcroft, ME (~800 km2)
-            "01052500",  # Diamond River near Wentworth Location, NH (~380 km2)
-            "01035000",  # Passadumkeag River at Lowell, ME (~769 km2)
+            "01013500",  # Fish River near Fort Kent, ME (area ~2253 km2)
+            "01031500",  # Piscataquis River near Dover-Foxcroft, ME (~769 km2)
+            "01052500",  # Diamond River near Wentworth Location, NH (~384 km2)
+            "01022500",  # Narraguagus River at Cherryfield, ME (~574 km2)
         ],
         "justification": (
             "Northern New England cluster spanning Maine and New Hampshire. "
             "Strong spring snowmelt signal with 25-40% snow fraction. Basins "
             "01013500 and 01031500 are among the most-studied CAMELS basins in "
-            "HUC-01 (Kratzert et al. 2019). Basin 01035000 replaces 01030500 "
-            "(Mattawamkeag, ~3700 km2 exceeded the 2000 km2 area criterion). "
+            "HUC-01 (Kratzert et al. 2019). Basin 01022500 replaces 01035000 "
+            "(Passadumkeag River at Lowell — absent from pygeohydro CAMELS "
+            "671-station dataset). Narraguagus River is a comparable Maine "
+            "coastal-headwater basin (~574 km2). "
             "Tests preservation of seasonal cycle timing, snowmelt peak "
             "magnitude, and moderate spatial correlation driven by shared "
             "snowpack dynamics."

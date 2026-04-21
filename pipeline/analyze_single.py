@@ -7,19 +7,22 @@ metrics, and saves them as CSVs. Skips if CSVs already exist unless
 --force is given.
 
 Usage:
-  python analyze_single.py --task-id 0
-  python analyze_single.py --region new_england --model kirsch
-  python analyze_single.py --list-tasks
-  python analyze_single.py --region new_england --model kirsch --force
+  python pipeline/analyze_single.py --task-id 0
+  python pipeline/analyze_single.py --region new_england --model kirsch
+  python pipeline/analyze_single.py --list-tasks
+  python pipeline/analyze_single.py --region new_england --model kirsch --force
 
-From SLURM (see run_analyze.sh):
-  python analyze_single.py --task-id $SLURM_ARRAY_TASK_ID
+From SLURM (see pipeline/slurm/run_analyze.sh):
+  python pipeline/analyze_single.py --task-id $SLURM_ARRAY_TASK_ID
 """
 
 import argparse
 import logging
-import os
 import sys
+from pathlib import Path
+
+# Make project root importable regardless of working directory.
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 # pyvinecopulib must be imported before pandas/pyarrow on Windows
 try:
@@ -29,10 +32,12 @@ except ImportError:
 
 from config import (
     DATA_DIR,
-    OUTPUT_DIR,
+    GENERATION_DIR,
+    ANALYSIS_DIR,
     MODELS,
     ACTIVE_REGIONS,
     SINGLE_SITE_INDEX,
+    LOG_DIR,
 )
 from basins import CAMELS_REGIONS
 from methods.data import load_region_data, get_reference_site_index
@@ -54,9 +59,10 @@ def analyze_for_region_model(region_id, model_key, force=False):
         If True, recompute even if CSVs already exist.
     """
     region_cfg = CAMELS_REGIONS[region_id]
-    region_output = OUTPUT_DIR / region_id
+    gen_output = GENERATION_DIR / region_id
+    analysis_output = ANALYSIS_DIR / region_id
 
-    if not force and metrics_exist(region_output, model_key):
+    if not force and metrics_exist(analysis_output, model_key):
         logger.info(
             "Metrics already exist for %s / %s -- skipping (use --force to override)",
             region_id,
@@ -64,12 +70,13 @@ def analyze_for_region_model(region_id, model_key, force=False):
         )
         return
 
-    ensemble = load_ensemble(region_output, model_key)
+    ensemble = load_ensemble(gen_output, model_key)
     if ensemble is None:
         logger.warning(
-            "No ensemble file found for %s / %s -- skipping",
+            "No ensemble file found for %s / %s in %s -- skipping",
             region_id,
             model_key,
+            gen_output,
         )
         return
 
@@ -94,7 +101,8 @@ def analyze_for_region_model(region_id, model_key, force=False):
         site_idx=site_idx,
     )
 
-    save_metrics(region_output, model_key, metrics_dict)
+    analysis_output.mkdir(parents=True, exist_ok=True)
+    save_metrics(analysis_output, model_key, metrics_dict)
     logger.info("Done: %s / %s", region_id, model_key)
 
 
@@ -158,9 +166,8 @@ def main():
         )
         sys.exit(1)
 
-    # Configure per-task log file
-    os.makedirs("logs", exist_ok=True)
-    log_file = os.path.join("logs", f"{region_id}_{model_key}_analyze.log")
+    LOG_DIR.mkdir(parents=True, exist_ok=True)
+    log_file = LOG_DIR / f"{region_id}_{model_key}_analyze.log"
     logging.basicConfig(
         level=logging.INFO,
         format="%(asctime)s %(levelname)s: %(message)s",

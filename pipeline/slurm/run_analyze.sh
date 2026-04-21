@@ -1,50 +1,48 @@
 #!/bin/bash
 #
-# SLURM array job for convergence sweeps (Stage 2b).
+# SLURM array job for metric computation (Stage 2).
 #
-# Each array task fits one generator for one region and sweeps
-# N_REALIZATIONS_SWEEP ensemble sizes, saving convergence CSVs.
-# Only non-annual models are included.
+# Each array task computes validation metrics for one (region, model) pair
+# and saves three CSVs under outputs/{region}/.
 #
-# Run `python convergence_single.py --list-tasks` to see the full mapping.
+# Run `python analyze_single.py --list-tasks` to see the full mapping.
 #
 # Typical submission:
-#   sbatch run_convergence.sh
+#   sbatch run_analyze.sh
+#
+# To run a subset (e.g. first region only):
+#   sbatch --array=0-12 run_analyze.sh
 #
 # Prerequisites:
-#   1. CAMELS data must be cached first: python 00_retrieve_data.py
+#   1. Stage 1 (generate_single.py) must have completed for these tasks.
 #   2. Python environment with synhydro installed must be available.
 #      Update PYTHON_CMD below to point to your environment.
-#
-# NOTE: convergence sweeps fit and generate repeatedly at different sizes,
-# so they are more compute-intensive than analyze_single. The slow path
-# at publication scale (N_MAX=500, 10 replicated subsets per sweep level,
-# 7 sweep levels) is vine copula and ARFIMA; these can approach 10 hrs
-# per task. Adjust --time and --mem downward for development runs.
 
-#SBATCH --job-name=synhydro_conv
-#SBATCH --array=0-59
+#SBATCH --job-name=synhydro_analyze
+#SBATCH --array=0-77
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=1
 #SBATCH --mem=16G
-#SBATCH --time=12:00:00
-#SBATCH --output=logs/slurm_conv_%A_%a.out
-#SBATCH --error=logs/slurm_conv_%A_%a.err
+#SBATCH --time=00:30:00
+#SBATCH --output=logs/slurm_analyze_%A_%a.out
+#SBATCH --error=logs/slurm_analyze_%A_%a.err
 
 # ============================================================================
 # Configuration -- edit these for your cluster
 # ============================================================================
 
 PYTHON_CMD="python"
-N_YEARS=50
-SEED=42
 
 # ============================================================================
 # Execution
 # ============================================================================
 
-cd "$(dirname "$0")" || exit 1
+cd "$(dirname "$0")/../.." || exit 1
 mkdir -p logs
+
+CONFIG_SUMMARY=$(${PYTHON_CMD} -c \
+    "from config import N_REALIZATIONS, N_YEARS, SEED; \
+     print(f'N_REAL={N_REALIZATIONS}  N_YEARS={N_YEARS}  SEED={SEED}')")
 
 echo "============================================"
 echo "SLURM Job ID:    ${SLURM_JOB_ID}"
@@ -52,12 +50,10 @@ echo "Array Task ID:   ${SLURM_ARRAY_TASK_ID}"
 echo "Node:            $(hostname)"
 echo "Start time:      $(date)"
 echo "Working dir:     $(pwd)"
+echo "Config (config.py): ${CONFIG_SUMMARY}"
 echo "============================================"
 
-${PYTHON_CMD} convergence_single.py \
-    --task-id "${SLURM_ARRAY_TASK_ID}" \
-    --n-years "${N_YEARS}" \
-    --seed "${SEED}"
+${PYTHON_CMD} pipeline/analyze_single.py --task-id "${SLURM_ARRAY_TASK_ID}"
 
 EXIT_CODE=$?
 

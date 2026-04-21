@@ -1,19 +1,20 @@
 """
 Stage checkpoint gate.
 
-Walks outputs/ to determine which expected (region, model) artifacts
-exist for a given pipeline stage, writes a status CSV under
-outputs/status/, and exits 0 only if all tasks have completed.
+Walks stage-specific output directories to determine which expected
+(region, model) artifacts exist for a given pipeline stage, writes a
+status CSV under outputs/status/, and exits 0 only if all tasks have
+completed.
 
-Used as a barrier between HPC stages in run_pipeline.sh, and called
-from assemble_results.py before running cross-region assembly.
+Used as a barrier between HPC stages in pipeline/slurm/run_pipeline.sh,
+and called from scripts/assemble_results.py before cross-region assembly.
 
 Usage:
-  python check_stage_complete.py --stage generate
-  python check_stage_complete.py --stage analyze
-  python check_stage_complete.py --stage convergence
-  python check_stage_complete.py --stage split_sample
-  python check_stage_complete.py --stage all       # all stages in one run
+  python pipeline/check_stage_complete.py --stage generate
+  python pipeline/check_stage_complete.py --stage analyze
+  python pipeline/check_stage_complete.py --stage convergence
+  python pipeline/check_stage_complete.py --stage split_sample
+  python pipeline/check_stage_complete.py --stage all
 """
 
 import argparse
@@ -22,9 +23,18 @@ import sys
 from datetime import datetime
 from pathlib import Path
 
+# Make project root importable regardless of working directory.
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+
 import pandas as pd
 
-from config import OUTPUT_DIR
+from config import (
+    OUTPUT_DIR,
+    GENERATION_DIR,
+    ANALYSIS_DIR,
+    CONVERGENCE_DIR,
+    SPLIT_SAMPLE_DIR,
+)
 from methods.io import (
     convergence_exists,
     split_sample_exists,
@@ -58,21 +68,55 @@ def _file_stats(path: Path) -> tuple:
     return (size_mb, mtime)
 
 
+def _hdf5_readable(path: Path) -> bool:
+    """Return True if path opens cleanly as an HDF5 file.
+
+    Catches the "file exists but truncated/corrupted mid-write" failure
+    mode that `.exists()` alone cannot detect. If the file is not an
+    HDF5 artifact (e.g. .pkl), we fall back to a size check -- any file
+    larger than 1 KB is presumed non-empty; zero-byte pickles fail.
+    """
+    if not path.exists():
+        return False
+    if path.suffix == ".h5":
+        try:
+            import h5py  # local import: only needed during gating
+            with h5py.File(path, "r") as f:
+                # Force metadata read so truncated files raise.
+                _ = list(f.keys())
+            return True
+        except Exception as exc:
+            logger.warning("HDF5 unreadable at %s: %s", path, exc)
+            return False
+    # Non-HDF5 artifacts (pickle): treat nonzero-size as readable.
+    return path.stat().st_size > 0
+
+
 def check_generate_stage() -> pd.DataFrame:
-    """Return status DataFrame for the generate stage."""
+    """Return status DataFrame for the generate stage.
+
+    Beyond file existence, HDF5 artifacts are validated by opening them
+    and listing root keys. Partial writes or corrupted files are
+    flagged as "corrupt" so they do not sneak past the gate.
+    """
     rows = []
     for region_id, model_key in get_generation_tasks():
-        region_output = OUTPUT_DIR / region_id
+        region_output = GENERATION_DIR / region_id
         artifact = _ensemble_artifact(region_output, model_key)
-        exists = artifact.exists()
+        if not artifact.exists():
+            status = "missing"
+        elif not _hdf5_readable(artifact):
+            status = "corrupt"
+        else:
+            status = "ok"
         size_mb, mtime = _file_stats(artifact)
         rows.append(
             {
                 "stage": "generate",
                 "region": region_id,
                 "model": model_key,
-                "status": "ok" if exists else "missing",
-                "artifact_path": str(artifact) if exists else "",
+                "status": status,
+                "artifact_path": str(artifact) if artifact.exists() else "",
                 "size_mb": size_mb,
                 "mtime": mtime,
             }
@@ -84,12 +128,10 @@ def check_analyze_stage() -> pd.DataFrame:
     """Return status DataFrame for the analyze stage."""
     rows = []
     for region_id, model_key in get_analysis_tasks():
-        region_output = OUTPUT_DIR / region_id
+        region_output = ANALYSIS_DIR / region_id
         exists = metrics_exist(region_output, model_key)
-        # Canonical representative artifact: the tidy metrics CSV.
         artifact = region_output / f"metrics_{model_key}.csv"
         if not artifact.exists():
-            # Fall back to any metrics_*.csv for this model.
             candidates = list(region_output.glob(f"*{model_key}*metrics*.csv"))
             artifact = candidates[0] if candidates else artifact
         size_mb, mtime = _file_stats(artifact)
@@ -111,7 +153,7 @@ def check_convergence_stage() -> pd.DataFrame:
     """Return status DataFrame for the convergence stage."""
     rows = []
     for region_id, model_key in get_convergence_tasks():
-        region_output = OUTPUT_DIR / region_id
+        region_output = CONVERGENCE_DIR / region_id
         exists = convergence_exists(region_output, model_key)
         artifact = region_output / f"convergence_{model_key}.csv"
         size_mb, mtime = _file_stats(artifact)
@@ -133,8 +175,8 @@ def check_split_sample_stage() -> pd.DataFrame:
     """Return status DataFrame for the split_sample stage."""
     rows = []
     for region_id, model_key in get_split_sample_tasks():
-        exists = split_sample_exists(OUTPUT_DIR, region_id, model_key)
-        artifact = OUTPUT_DIR / "split_sample" / f"{region_id}__{model_key}.csv"
+        exists = split_sample_exists(SPLIT_SAMPLE_DIR, region_id, model_key)
+        artifact = SPLIT_SAMPLE_DIR / f"{region_id}__{model_key}.csv"
         size_mb, mtime = _file_stats(artifact)
         rows.append(
             {
@@ -174,15 +216,17 @@ def check_stage(stage: str, write_csv: bool = True) -> bool:
 
     n_total = len(df)
     n_ok = int((df["status"] == "ok").sum())
-    n_missing = n_total - n_ok
+    n_bad = n_total - n_ok
 
     print(f"\n=== Stage: {stage} ===")
     print(f"  complete: {n_ok} / {n_total}")
-    if n_missing > 0:
-        print(f"  MISSING:  {n_missing}")
-        missing_df = df[df["status"] == "missing"].sort_values(["region", "model"])
-        for _, r in missing_df.iterrows():
-            print(f"    {r['region']:25s}  {r['model']}")
+    if n_bad > 0:
+        for bad_status in ("missing", "corrupt"):
+            bad_df = df[df["status"] == bad_status].sort_values(["region", "model"])
+            if not bad_df.empty:
+                print(f"  {bad_status.upper()}: {len(bad_df)}")
+                for _, r in bad_df.iterrows():
+                    print(f"    {r['region']:25s}  {r['model']}")
         return False
     return True
 

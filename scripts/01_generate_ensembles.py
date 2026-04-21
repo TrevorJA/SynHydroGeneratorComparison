@@ -16,8 +16,13 @@ Usage:
 
 import argparse
 import logging
+import sys
 import time
 import traceback
+from pathlib import Path
+
+# Make project root importable regardless of working directory.
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 # pyvinecopulib must be imported before pandas/pyarrow on Windows to avoid
 # a C++ runtime DLL conflict.  Keep this import first.
@@ -31,7 +36,7 @@ import pickle
 
 from config import (
     DATA_DIR,
-    OUTPUT_DIR,
+    GENERATION_DIR,
     N_REALIZATIONS,
     N_YEARS,
     SEED,
@@ -92,7 +97,7 @@ def generate_for_region(
         f"  Reference site (highest mean flow): {Q_monthly.columns[ref_site_idx]} (index {ref_site_idx})"
     )
 
-    region_output = OUTPUT_DIR / region_id
+    region_output = GENERATION_DIR / region_id
     region_output.mkdir(parents=True, exist_ok=True)
 
     if DIAGNOSTICS.get("save_historical", True):
@@ -108,6 +113,14 @@ def generate_for_region(
 
         print(f"\n  [{i}/{n_models}] {model_key}: {cfg['description']}")
         print(f"    Class: {class_name} | Frequency: {freq} | {sites_label}")
+
+        h5_path = region_output / f"ensemble_{model_key}.h5"
+        pkl_path = region_output / f"ensemble_{model_key}.pkl"
+        if h5_path.exists() or pkl_path.exists():
+            existing = h5_path if h5_path.exists() else pkl_path
+            print(f"    SKIP: {existing} already exists")
+            results[model_key] = True
+            continue
 
         try:
             gen_cls = GENERATOR_CLASSES[class_name]
@@ -182,6 +195,12 @@ def main():
     )
     parser.add_argument("--model", type=str, default=None, help="Single model to run")
     parser.add_argument(
+        "--skip-models",
+        type=str,
+        default=None,
+        help="Comma-separated model keys to exclude (e.g. multisite_phase_randomization)",
+    )
+    parser.add_argument(
         "--n-realizations",
         type=int,
         default=None,
@@ -214,9 +233,13 @@ def main():
 
     region_filter = [args.region] if args.region else ACTIVE_REGIONS
     model_filter = [args.model] if args.model else ACTIVE_MODELS
+    skip_set = set(args.skip_models.split(",")) if args.skip_models else set()
 
     regions = get_active_regions(region_filter)
     models = get_enabled_models(model_filter)
+    if skip_set:
+        models = {k: v for k, v in models.items() if k not in skip_set}
+        print(f"  Skipping:       {sorted(skip_set)}")
 
     print("=" * 70)
     print("SynHydro Model Comparison -- Ensemble Generation")
@@ -250,7 +273,7 @@ def main():
         print(f"\n  {region_id}: {len(succeeded)}/{len(results)} succeeded")
         if failed:
             print(f"    Failed: {failed}")
-    print(f"\nOutputs saved under: {OUTPUT_DIR}")
+    print(f"\nOutputs saved under: {GENERATION_DIR}")
     print("=" * 70)
 
 

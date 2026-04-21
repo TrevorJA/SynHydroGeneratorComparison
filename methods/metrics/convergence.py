@@ -18,7 +18,7 @@ import numpy as np
 import pandas as pd
 from synhydro import validate_ensemble
 
-from config import DATA_DIR, OUTPUT_DIR, N_YEARS, SEED, MODELS
+from config import DATA_DIR, CONVERGENCE_DIR, N_YEARS, SEED, MODELS
 from basins import CAMELS_REGIONS
 from methods.data import load_region_data, select_input_data, get_reference_site_index
 from methods.io import GENERATOR_CLASSES
@@ -60,7 +60,7 @@ def _subsample_ensemble(ensemble, indices):
     Ensemble
         Subset ensemble.
     """
-    return ensemble.subset(indices)
+    return ensemble.subset(realizations=list(indices))
 
 
 def run_convergence_for_region_model(
@@ -95,7 +95,7 @@ def run_convergence_for_region_model(
         were generated is nonsensical.
     """
     region_cfg = CAMELS_REGIONS[region_id]
-    region_output = OUTPUT_DIR / region_id
+    region_output = CONVERGENCE_DIR / region_id
     region_output.mkdir(parents=True, exist_ok=True)
 
     summary_path = region_output / f"convergence_{model_key}.csv"

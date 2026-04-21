@@ -8,12 +8,16 @@ missing. Use --skip-check to bypass (e.g. for single-region assembly
 during a smoke test).
 
 Usage:
-  python assemble_results.py                    # all regions, checked
-  python assemble_results.py --region new_england --skip-check
+  python scripts/assemble_results.py                    # all regions, checked
+  python scripts/assemble_results.py --region new_england --skip-check
 """
 
 import argparse
 import sys
+from pathlib import Path
+
+# Make project root importable regardless of working directory.
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from config import ACTIVE_REGIONS
 from methods.assembly import assemble
@@ -46,7 +50,7 @@ def main():
     # is missing its metrics CSV. Single-region runs skip this by default
     # because they are typically smoke tests.
     if not args.skip_check and region_filter is None:
-        from check_stage_complete import check_stage
+        from pipeline.check_stage_complete import check_stage
 
         if not check_stage("analyze"):
             print(

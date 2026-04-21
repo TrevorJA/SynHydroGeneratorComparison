@@ -38,17 +38,20 @@ import logging
 import sys
 from pathlib import Path
 
+# Make project root importable regardless of working directory.
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+
 import numpy as np
 import pandas as pd
 from scipy.stats import spearmanr
 
-from config import OUTPUT_DIR
+from config import CROSS_REGION_DIR
 
 logger = logging.getLogger(__name__)
 
 RHO_THRESHOLD = 0.9
 TOP_K = 3
-DECISION_PATH = OUTPUT_DIR / "cross_region" / "fig4_demotion_decision.json"
+DECISION_PATH = CROSS_REGION_DIR / "fig4_demotion_decision.json"
 
 
 def _per_regime_spearman(mare_df: pd.DataFrame, rank_df: pd.DataFrame) -> pd.DataFrame:
@@ -121,8 +124,8 @@ def _per_regime_top_k_agreement(
 
 def evaluate() -> dict:
     """Evaluate the rule. Returns a decision dict."""
-    mare_path = OUTPUT_DIR / "cross_region" / "mare.csv"
-    rank_path = OUTPUT_DIR / "cross_region" / "rank_scores.csv"
+    mare_path = CROSS_REGION_DIR / "mare.csv"
+    rank_path = CROSS_REGION_DIR / "rank_scores.csv"
 
     for p in (mare_path, rank_path):
         if not p.exists():

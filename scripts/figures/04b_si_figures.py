@@ -34,10 +34,16 @@ Usage:
 
 import argparse
 import logging
+import sys
+from pathlib import Path
+
+# Make project root importable regardless of working directory.
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
 
 from config import (
     DATA_DIR,
-    OUTPUT_DIR,
+    ANALYSIS_DIR,
+    CROSS_REGION_DIR,
     SI_FIGURE_DIR,
     MODELS,
     ACTIVE_REGIONS,
@@ -97,7 +103,7 @@ def generate_region_figures(region_id, region_cfg, model_colors, skip_dist=False
         region_id, DATA_DIR, region_cfg["stations"]
     )
 
-    region_output = OUTPUT_DIR / region_id
+    region_output = ANALYSIS_DIR / region_id
     region_fig_dir = SI_FIGURE_DIR / region_id
     region_fig_dir.mkdir(parents=True, exist_ok=True)
 
@@ -418,7 +424,7 @@ def main():
         )
 
     # Cross-region figures from mare.csv
-    mare_csv = OUTPUT_DIR / "cross_region" / "mare.csv"
+    mare_csv = CROSS_REGION_DIR / "mare.csv"
     if mare_csv.exists():
         print("\n\nGenerating cross-region SI figures from CSV...")
         cross_dir = SI_FIGURE_DIR / "cross_region"

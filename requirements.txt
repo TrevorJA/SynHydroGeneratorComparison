@@ -1,0 +1,65 @@
+# Python dependencies for the SynHydroGeneratorComparison pipeline.
+#
+# ---------------------------------------------------------------------
+# How to use this file
+# ---------------------------------------------------------------------
+# This file lists DIRECT top-level dependencies only. It is intentionally
+# unpinned so that it captures intent ("we need numpy / pandas / h5py /
+# ...") independent of any particular cluster's build toolchain.
+#
+# For reproducibility on a specific cluster (e.g., Hopper), create a
+# pinned lockfile from the environment that actually runs:
+#
+#   pip freeze --exclude-editable > requirements-lock.txt
+#
+# Check requirements-lock.txt into the repo for any publication run.
+# The unpinned requirements.txt stays as the source of intent; the
+# locked file captures the exact versions used.
+#
+# ---------------------------------------------------------------------
+# Hopper environment setup (module load + conda env)
+# ---------------------------------------------------------------------
+# module purge
+# module load anaconda3            # or whichever Python module Hopper
+#                                  # recommends for the target compiler
+# conda create -n synhydro python=3.11 -y
+# conda activate synhydro
+# pip install -r requirements.txt
+# pip install -e /path/to/synhydro   # the internal library, editable
+#
+# ---------------------------------------------------------------------
+# Numerical stack
+# ---------------------------------------------------------------------
+numpy
+scipy
+pandas
+matplotlib
+
+# ---------------------------------------------------------------------
+# I/O
+# ---------------------------------------------------------------------
+h5py              # HDF5 ensemble files; required by check_stage_complete
+                  # and generate_single post-save verification
+pyarrow           # pandas parquet/HDF5 backends
+
+# ---------------------------------------------------------------------
+# Stochastic generator backends (used via synhydro, but explicit here
+# so missing-dependency errors are legible without reading synhydro
+# internals)
+# ---------------------------------------------------------------------
+pyvinecopulib     # R-vine copula family
+hmmlearn          # multi-site HMM
+PyWavelets        # WARM wavelet decomposition
+scikit-learn      # KMeans / clustering for failure-mode derivation
+
+# ---------------------------------------------------------------------
+# CAMELS retrieval (used by 00_retrieve_data.py)
+# ---------------------------------------------------------------------
+pygeohydro        # CAMELS dataset bulk download
+xarray            # CAMELS discharge dataset container
+netCDF4           # xarray NetCDF backend
+
+# ---------------------------------------------------------------------
+# Internal library (install separately; not on PyPI)
+# ---------------------------------------------------------------------
+# synhydro        # install with: pip install -e /path/to/synhydro

@@ -5,7 +5,7 @@
 # Submits all stages as SLURM array jobs and chains them with
 # --dependency=afterok: so a failing upstream stage blocks downstream
 # work. After each array completes, a checkpoint job runs
-# `check_stage_complete.py` to produce an audit CSV.
+# `pipeline/check_stage_complete.py` to produce an audit CSV.
 #
 # DAG:
 #   generate (78 tasks)
@@ -19,18 +19,19 @@
 # convergence + split_sample so that all cross-region CSVs exist
 # when figures run.
 #
-# Usage:
-#   ./run_pipeline.sh
-#   SKIP=generate ./run_pipeline.sh         # assume generate already done
-#   SKIP=generate,analyze ./run_pipeline.sh # start from assemble
+# Usage (from project root):
+#   ./pipeline/slurm/run_pipeline.sh
+#   SKIP=generate ./pipeline/slurm/run_pipeline.sh
+#   SKIP=generate,analyze ./pipeline/slurm/run_pipeline.sh
 #
 # Prerequisites:
-#   1. CAMELS data cached: python 00_retrieve_data.py
+#   1. CAMELS data cached: python scripts/00_retrieve_data.py
 #   2. SLURM available in PATH.
 
 set -e
 
-cd "$(dirname "$0")" || exit 1
+# Change to project root regardless of where this script lives.
+cd "$(dirname "$0")/../.." || exit 1
 mkdir -p logs outputs/status
 
 PYTHON_CMD="${PYTHON_CMD:-python}"
@@ -63,7 +64,7 @@ submit_check() {
         --job-name="check_${stage}" \
         --time=00:10:00 --mem=4G \
         --output="logs/check_${stage}_%j.out" \
-        --wrap="${PYTHON_CMD} check_stage_complete.py --stage ${stage}"
+        --wrap="${PYTHON_CMD} pipeline/check_stage_complete.py --stage ${stage}"
 }
 
 submit_serial() {
@@ -91,7 +92,7 @@ echo "============================================"
 if should_skip generate; then
     echo "[skip] generate stage"
 else
-    GEN_JOB=$(submit_array run_hpc_array.sh "")
+    GEN_JOB=$(submit_array pipeline/slurm/run_generate.sh "")
     echo "submitted generate:    ${GEN_JOB}"
     GEN_CHECK=$(submit_check generate "${GEN_JOB}")
     echo "submitted gen check:   ${GEN_CHECK}"
@@ -101,7 +102,7 @@ if should_skip analyze; then
     echo "[skip] analyze stage"
 else
     ANA_DEPS="${GEN_CHECK:-}"
-    ANA_JOB=$(submit_array run_analyze.sh "${ANA_DEPS}")
+    ANA_JOB=$(submit_array pipeline/slurm/run_analyze.sh "${ANA_DEPS}")
     echo "submitted analyze:     ${ANA_JOB}"
     ANA_CHECK=$(submit_check analyze "${ANA_JOB}")
     echo "submitted ana check:   ${ANA_CHECK}"
@@ -112,7 +113,7 @@ if should_skip assemble; then
 else
     ASM_DEPS="${ANA_CHECK:-}"
     ASM_JOB=$(submit_serial assemble \
-        "${PYTHON_CMD} assemble_results.py" \
+        "${PYTHON_CMD} scripts/assemble_results.py" \
         "${ASM_DEPS}")
     echo "submitted assemble:    ${ASM_JOB}"
 fi
@@ -121,7 +122,7 @@ if should_skip convergence; then
     echo "[skip] convergence stage"
 else
     CONV_DEPS="${ANA_CHECK:-}"
-    CONV_JOB=$(submit_array run_convergence.sh "${CONV_DEPS}")
+    CONV_JOB=$(submit_array pipeline/slurm/run_convergence.sh "${CONV_DEPS}")
     echo "submitted convergence: ${CONV_JOB}"
     CONV_CHECK=$(submit_check convergence "${CONV_JOB}")
     echo "submitted conv check:  ${CONV_CHECK}"
@@ -131,7 +132,7 @@ if should_skip split_sample; then
     echo "[skip] split_sample stage"
 else
     SPLIT_DEPS="${ANA_CHECK:-}"
-    SPLIT_JOB=$(submit_array run_split_sample.sh "${SPLIT_DEPS}")
+    SPLIT_JOB=$(submit_array pipeline/slurm/run_split_sample.sh "${SPLIT_DEPS}")
     echo "submitted split:       ${SPLIT_JOB}"
     SPLIT_CHECK=$(submit_check split_sample "${SPLIT_JOB}")
     echo "submitted split check: ${SPLIT_CHECK}"
@@ -140,24 +141,22 @@ fi
 if should_skip figures; then
     echo "[skip] figures stage"
 else
-    # Figures depend on assemble + convergence + split_sample checkpoints.
     FIG_DEPS=""
     for d in "${ASM_JOB}" "${CONV_CHECK:-}" "${SPLIT_CHECK:-}"; do
         if [ -n "$d" ]; then
             if [ -n "${FIG_DEPS}" ]; then FIG_DEPS="${FIG_DEPS}:$d"; else FIG_DEPS="$d"; fi
         fi
     done
-    # SI first (diagnostic + convergence), then main manuscript figures.
     SI_FIG_JOB=$(submit_serial si_figures \
-        "${PYTHON_CMD} 04b_si_figures.py" \
+        "${PYTHON_CMD} scripts/figures/04b_si_figures.py" \
         "${FIG_DEPS}")
     echo "submitted SI figures:  ${SI_FIG_JOB}"
     SI_CONV_FIG_JOB=$(submit_serial si_conv_figures \
-        "${PYTHON_CMD} 04c_si_convergence_figures.py" \
+        "${PYTHON_CMD} scripts/figures/04c_si_convergence_figures.py" \
         "${FIG_DEPS}")
     echo "submitted SI conv figs: ${SI_CONV_FIG_JOB}"
     MAIN_FIG_JOB=$(submit_serial main_figures \
-        "${PYTHON_CMD} 04a_main_figures.py" \
+        "${PYTHON_CMD} scripts/figures/04a_main_figures.py" \
         "${SI_FIG_JOB}:${SI_CONV_FIG_JOB}")
     echo "submitted main figs:   ${MAIN_FIG_JOB}"
 fi

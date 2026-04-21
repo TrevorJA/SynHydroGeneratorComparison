@@ -19,6 +19,20 @@ DATA_DIR = _EXPT_DIR / "data"
 OUTPUT_DIR = _EXPT_DIR / "outputs"
 FIGURE_DIR = _EXPT_DIR / "figures"
 
+# Stage-organized output subdirectories (one per pipeline stage).
+# Separating stages prevents HDF5 ensembles and small metric CSVs from
+# piling up in the same per-region directory and makes stage-level
+# inspection straightforward (ls outputs/generation/ vs outputs/analysis/).
+GENERATION_DIR = OUTPUT_DIR / "generation"    # ensemble HDF5 + historical CSVs
+ANALYSIS_DIR = OUTPUT_DIR / "analysis"        # per-(region, model) metric CSVs
+CONVERGENCE_DIR = OUTPUT_DIR / "convergence"  # convergence sweep CSVs
+SPLIT_SAMPLE_DIR = OUTPUT_DIR / "split_sample"
+CROSS_REGION_DIR = OUTPUT_DIR / "cross_region"
+
+# Central log directory.  All pipeline scripts write logs here so that
+# `ls logs/` gives a flat, searchable record of every array task.
+LOG_DIR = _EXPT_DIR / "logs"
+
 # Figures are split into two roots by audience:
 #   - MAIN_FIGURE_DIR: the 10 manuscript main-text figures
 #       (produced by 04a_main_figures.py; registry in

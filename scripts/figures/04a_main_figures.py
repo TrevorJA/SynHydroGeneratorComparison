@@ -20,6 +20,11 @@ Usage:
 
 import argparse
 import logging
+import sys
+from pathlib import Path
+
+# Make project root importable regardless of working directory.
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
 
 from config import MAIN_FIGURE_DIR, OUTPUT_DIR
 from methods.plotting import apply_rcparams

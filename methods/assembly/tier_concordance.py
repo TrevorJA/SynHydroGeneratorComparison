@@ -68,21 +68,21 @@ def build_tier_concordance(mare_df: pd.DataFrame) -> pd.DataFrame:
     return pd.DataFrame(rows)
 
 
-def assemble_tier_concordance(output_dir: Path) -> Path:
+def assemble_tier_concordance(cross_region_dir: Path) -> Path:
     """Write tier_concordance.csv and log global Spearman rho.
 
     Parameters
     ----------
-    output_dir : Path
-        The OUTPUT_DIR (typically `experiments/model_comparison/outputs`).
-        Expects `cross_region/mare.csv` to already exist there.
+    cross_region_dir : Path
+        The cross-region output directory (CROSS_REGION_DIR from config).
+        Expects `mare.csv` to already exist there.
 
     Returns
     -------
     Path
         Path to the written CSV, or an empty placeholder path if no data.
     """
-    mare_path = output_dir / "cross_region" / "mare.csv"
+    mare_path = cross_region_dir / "mare.csv"
     if not mare_path.exists():
         logger.warning(
             "tier_concordance: %s missing; run assemble_results.py first",
@@ -93,7 +93,7 @@ def assemble_tier_concordance(output_dir: Path) -> Path:
     mare_df = pd.read_csv(mare_path)
     concordance = build_tier_concordance(mare_df)
 
-    out_path = output_dir / "cross_region" / "tier_concordance.csv"
+    out_path = cross_region_dir / "tier_concordance.csv"
     if concordance.empty:
         logger.warning(
             "tier_concordance: no (region, model) pairs with both tiers present"

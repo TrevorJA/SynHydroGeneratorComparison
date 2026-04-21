@@ -16,11 +16,16 @@ Usage:
 
 import argparse
 import logging
+import sys
+from pathlib import Path
+
+# Make project root importable regardless of working directory.
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
 
 import matplotlib.pyplot as plt
 import pandas as pd
 
-from config import OUTPUT_DIR, SI_FIGURE_DIR, MODELS, ACTIVE_REGIONS
+from config import CONVERGENCE_DIR, SI_FIGURE_DIR, MODELS, ACTIVE_REGIONS
 from basins import CAMELS_REGIONS
 from methods.analysis import assign_colors
 from methods.plotting import (
@@ -49,7 +54,7 @@ def load_convergence_for_region(region_id):
     summary_df : pd.DataFrame or None
     detail_df : pd.DataFrame or None
     """
-    region_output = OUTPUT_DIR / region_id
+    region_output = CONVERGENCE_DIR / region_id
     eligible_models = [
         k
         for k, v in MODELS.items()
